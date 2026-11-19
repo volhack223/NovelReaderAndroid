@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>竖屏小说阅读器</title>
+<style>
+  :root {
+    --bg: #F6F1E7;
+    --surface: #EFE8DA;
+    --surface-hover: #E5DCCB;
+    --text: #2C2621;
+    --text-muted: #756A5E;
+    --border: rgba(44, 38, 33, 0.12);
+    --accent: #A0522D;
+    --accent-soft: rgba(160, 82, 45, 0.14);
+    --font-family: sans-serif;
+    --font-size: 19px;
+    --line-height: 1.85;
+    --para-spacing: 1.0em;
+    --padding-x: 18px;
+  }
+  [data-theme="green"] {
+    --bg: #E4EFE4; --surface: #D7E6D7; --surface-hover: #C8DBC8;
+    --text: #223026; --text-muted: #586F5D; --border: rgba(34,48,38,0.12);
+    --accent: #2E7D4F; --accent-soft: rgba(46,125,79,0.14);
+  }
+  [data-theme="white"] {
+    --bg: #FFFFFF; --surface: #F4F5F7; --surface-hover: #E8EAEE;
+    --text: #1F2328; --text-muted: #656D76; --border: rgba(31,35,40,0.1);
+    --accent: #2563EB; --accent-soft: rgba(37,99,235,0.12);
+  }
+  [data-theme="dark"] {
+    --bg: #1C1E22; --surface: #25282E; --surface-hover: #2F333B;
+    --text: #C9CED6; --text-muted: #848B96; --border: rgba(255,255,255,0.08);
+    --accent: #D98A4E; --accent-soft: rgba(217,138,78,0.16);
+  }
+  [data-theme="oled"] {
+    --bg: #000000; --surface: #121214; --surface-hover: #1E1E22;
+    --text: #B8BDC5; --text-muted: #727780; --border: rgba(255,255,255,0.1);
+    --accent: #C7824A; --accent-soft: rgba(199,130,74,0.18);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; background: var(--bg); color: var(--text);
+    font-family: var(--font-family); overflow: hidden;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .progress-line {
+    position: fixed; top: 0; left: 0; height: 2px;
+    background: var(--accent); width: 0%; z-index: 50;
+  }
+
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 52px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 10px; z-index: 40;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .topbar.hidden { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+  .book-title-bar {
+    flex: 1; text-align: center; font-size: 14px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px;
+  }
+
+  .btn {
+    border: none; background: transparent; color: var(--text);
+    padding: 8px 10px; border-radius: 8px; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 4px; font-family: inherit;
+  }
+  .btn:active { background: var(--surface-hover); }
+  .btn-primary { background: var(--accent); color: #fff; }
+
+  .reader-viewport {
+    height: 100vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 64px var(--padding-x) 84px;
+  }
+
+  .chapter-heading {
+    font-size: calc(var(--font-size) * 1.28);
+    font-weight: 700; line-height: 1.4;
+    margin-bottom: 1.2em; padding-bottom: 0.6em;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chapter-body {
+    font-size: var(--font-size); line-height: var(--line-height);
+    letter-spacing: 0.02em; word-break: break-word;
+  }
+  .chapter-body p { margin-bottom: var(--para-spacing); text-align: justify; }
+  .chapter-body.indent p { text-indent: 2em; }
+
+  .novel-img-wrap { margin: 1.2em auto; text-align: center; text-indent: 0 !important; }
+  .novel-img-box {
+    display: inline-block; max-width: 100%; border-radius: 10px;
+    overflow: hidden; background: var(--surface); border: 1px solid var(--border);
+    min-width: 180px; min-height: 100px;
+  }
+  .novel-img-box img {
+    display: block; max-width: 100%; max-height: 78vh;
+    width: auto; height: auto; margin: 0 auto;
+    opacity: 0; transition: opacity 0.25s ease;
+  }
+  .novel-img-box img.loaded { opacity: 1; }
+  .novel-img-status {
+    padding: 20px 14px; font-size: 13px; color: var(--text-muted);
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .novel-img-status button {
+    padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 12px;
+  }
+
+  .chapter-footer {
+    margin-top: 2.5em; padding-top: 1.2em; border-top: 1px solid var(--border);
+    display: flex; gap: 10px;
+  }
+  .nav-btn {
+    flex: 1; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-size: 15px; font-family: inherit;
+  }
+  .nav-btn:disabled { opacity: 0.4; }
+
+  .bottombar {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 48px;
+    background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; font-size: 12px; color: var(--text-muted); z-index: 40;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .bottombar.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.42);
+    z-index: 60; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .overlay.open { opacity: 1; pointer-events: auto; }
+
+  .drawer {
+    position: fixed; top: 0; bottom: 0; width: 84vw; max-width: 340px;
+    background: var(--bg); z-index: 70; display: flex; flex-direction: column;
+    transition: transform 0.22s ease;
+  }
+  .drawer.left { left: 0; transform: translateX(-105%); }
+  .drawer.bottom {
+    left: 0; right: 0; top: auto; width: 100%; max-width: none; max-height: 78vh;
+    border-radius: 16px 16px 0 0; transform: translateY(105%);
+  }
+  .drawer.open { transform: translate(0, 0); }
+
+  .drawer-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: 600; font-size: 15px;
+  }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 12px 14px; }
+
+  .search-input {
+    width: 100%; padding: 9px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-size: 14px; margin-bottom: 10px; outline: none;
+  }
+  .toc-item {
+    padding: 11px 10px; border-radius: 8px; font-size: 14px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toc-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .book-card {
+    padding: 12px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .book-card.active { border-color: var(--accent); background: var(--accent-soft); }
+  .book-card-info { min-width: 0; flex: 1; }
+  .book-card-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .book-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  .setting-group { margin-bottom: 16px; }
+  .setting-label { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+  .theme-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .theme-swatch {
+    height: 38px; border-radius: 8px; border: 2px solid transparent;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;
+  }
+  .theme-swatch.active { border-color: var(--accent); }
+  .range-input { width: 100%; accent-color: var(--accent); }
+  .select-input {
+    width: 100%; padding: 9px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px;
+  }
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 14px; }
+
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.94); z-index: 100;
+    display: none; align-items: center; justify-content: center; padding: 12px;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 98vw; max-height: 94vh; object-fit: contain; }
+
+  .toast {
+    position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%);
+    background: rgba(24,24,28,0.9); color: #fff; padding: 8px 16px;
+    border-radius: 99px; font-size: 13px; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s; z-index: 130; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="progress-line" id="progressLine"></div>
+
+<header class="topbar" id="topbar">
+  <button class="btn" onclick="openDrawer('bookshelf')">📚 书架</button>
+  <div class="book-title-bar" id="topBookTitle">竖屏小说阅读器</div>
+  <button class="btn" onclick="pickFile()">📂 打开</button>
+</header>
+
+<main class="reader-viewport" id="viewport">
+  <article id="readerColumn">
+    <h1 class="chapter-heading" id="chapterTitle">加载中...</h1>
+    <div class="chapter-body indent" id="chapterBody"></div>
+    <div class="chapter-footer">
+      <button class="nav-btn" id="prevBtn" onclick="goChapter(currentChapter - 1)">← 上一章</button>
+      <button class="nav-btn" id="nextBtn" onclick="goChapter(currentChapter + 1)">下一章 →</button>
+    </div>
+  </article>
+</main>
+
+<footer class="bottombar" id="bottombar">
+  <button class="btn" onclick="openDrawer('toc')">📑 目录</button>
+  <span id="bottomPercent">0%</span>
+  <button class="btn" onclick="openDrawer('settings')">⚙ 设置</button>
+</footer>
+
+<div class="overlay" id="overlay" onclick="closeAllDrawers()"></div>
+
+<aside class="drawer left" id="drawer-bookshelf">
+  <div class="drawer-header">
+    <span>📚 我的书架</span>
+    <button class="btn btn-primary" onclick="pickFile()">+ 导入 TXT</button>
+  </div>
+  <div class="drawer-body" id="bookshelfList"></div>
+</aside>
+
+<aside class="drawer left" id="drawer-toc">
+  <div class="drawer-header">
+    <span>📑 章节目录</span>
+    <button class="btn" onclick="closeAllDrawers()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <input type="text" class="search-input" id="tocSearch" placeholder="搜索章节..." oninput="renderToc()">
+    <div id="tocList"></div>
+  </div>
+</aside>
+
+<aside class="drawer bottom" id="drawer-settings">
+  <div class="drawer-header">
+    <span>⚙ 阅读设置</span>
+    <button class="btn" onclick="closeAllDrawers()">完成</button>
+  </div>
+  <div class="drawer-body">
+    <div class="setting-group">
+      <div class="setting-label"><span>护眼主题</span></div>
+      <div class="theme-grid">
+        <div class="theme-swatch" data-t="paper" style="background:#F6F1E7;color:#2C2621" onclick="setTheme('paper')">纸墨</div>
+        <div class="theme-swatch" data-t="green" style="background:#E4EFE4;color:#223026" onclick="setTheme('green')">护眼</div>
+        <div class="theme-swatch" data-t="white" style="background:#FFFFFF;color:#1F2328" onclick="setTheme('white')">纯净</div>
+        <div class="theme-swatch" data-t="dark" style="background:#1C1E22;color:#C9CED6" onclick="setTheme('dark')">夜灰</div>
+        <div class="theme-swatch" data-t="oled" style="background:#000000;color:#B8BDC5" onclick="setTheme('oled')">纯黑</div>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-label"><span>字体风格</span></div>
+      <select class="select-input" id="setFontFamily" onchange="updateSetting('fontFamily', this.value)">
+        <option value="sans-serif">系统无衬线（清晰）</option>
+        <option value="serif">系统衬线（出版感）</option>
+        <option value="monospace">等宽字体</option>
+      </select>
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-label"><span>字号</span><span id="valFontSize">19px</span></div>
+      <input type="range" class="range-input" id="setFontSize" min="14" max="30" step="1" oninput="updateSetting('fontSize', +this.value)">
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-label"><span>行距</span><span id="valLineHeight">1.85</span></div>
+      <input type="range" class="range-input" id="setLineHeight" min="1.4" max="2.4" step="0.05" oninput="updateSetting('lineHeight', +this.value)">
+    </div>
+
+    <div class="setting-group">
+      <div class="setting-label"><span>左右边距</span><span id="valPaddingX">18px</span></div>
+      <input type="range" class="range-input" id="setPaddingX" min="10" max="40" step="2" oninput="updateSetting('paddingX', +this.value)">
+    </div>
+
+    <div class="toggle-row">
+      <span>首行缩进（两格）</span>
+      <input type="checkbox" id="setTextIndent" onchange="updateSetting('textIndent', this.checked)">
+    </div>
+
+    <div class="toggle-row">
+      <span>音量键上下翻页</span>
+      <input type="checkbox" id="setVolumeKeys" onchange="updateSetting('volumeKeys', this.checked)">
+    </div>
+
+    <div class="toggle-row">
+      <span>自动加载内嵌插图</span>
+      <input type="checkbox" id="setAutoLoadImages" onchange="updateSetting('autoLoadImages', this.checked)">
+    </div>
+
+    <div style="margin-top:14px">
+      <button class="btn" style="width:100%;justify-content:center;border:1px solid var(--border)" onclick="clearCache()">🧹 清理图片缓存</button>
+    </div>
+  </div>
+</aside>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" alt="大图预览">
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const IMG_TAG_RE = /\[(?:图片|插图|image|img)\s*[:：]\s*(https?:\/\/[^\]\s]+)\s*\]/gi;
+const THEME_BARS = {
+  paper: ['#EFE8DA', false],
+  green: ['#D7E6D7', false],
+  white: ['#F4F5F7', false],
+  dark:  ['#25282E', true],
+  oled:  ['#000000', true]
+};
+
+let appState = null;
+let currentBookId = null;
+let currentToc = [];
+let currentChapter = 0;
+let barsVisible = true;
+let saveTimer = null;
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function applySettings(s) {
+  const theme = s.theme || 'paper';
+  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.style.setProperty('--font-family', s.fontFamily || 'sans-serif');
+  document.documentElement.style.setProperty('--font-size', (s.fontSize || 19) + 'px');
+  document.documentElement.style.setProperty('--line-height', s.lineHeight || 1.85);
+  document.documentElement.style.setProperty('--padding-x', (s.paddingX || 18) + 'px');
+
+  document.getElementById('chapterBody').classList.toggle('indent', s.textIndent !== false);
+  document.getElementById('setFontFamily').value = s.fontFamily || 'sans-serif';
+  document.getElementById('setFontSize').value = s.fontSize || 19;
+  document.getElementById('valFontSize').textContent = (s.fontSize || 19) + 'px';
+  document.getElementById('setLineHeight').value = s.lineHeight || 1.85;
+  document.getElementById('valLineHeight').textContent = (s.lineHeight || 1.85).toFixed(2);
+  document.getElementById('setPaddingX').value = s.paddingX || 18;
+  document.getElementById('valPaddingX').textContent = (s.paddingX || 18) + 'px';
+  document.getElementById('setTextIndent').checked = s.textIndent !== false;
+  document.getElementById('setVolumeKeys').checked = s.volumeKeys !== false;
+  document.getElementById('setAutoLoadImages').checked = s.autoLoadImages !== false;
+
+  document.querySelectorAll('.theme-swatch').forEach(el => {
+    el.classList.toggle('active', el.dataset.t === theme);
+  });
+  const barStyle = THEME_BARS[theme] || THEME_BARS.paper;
+  if (window.AndroidBridge) {
+    AndroidBridge.setSystemBarStyle(barStyle[0], barStyle[1]);
+  }
+}
+
+function setTheme(theme) { updateSetting('theme', theme); }
+
+function updateSetting(key, val) {
+  appState.settings[key] = val;
+  applySettings(appState.settings);
+  if (key === 'autoLoadImages') loadChapter(currentChapter, false, 0);
+  if (window.AndroidBridge) {
+    AndroidBridge.saveSettings(JSON.stringify(appState.settings));
+  }
+}
+
+function toggleBars(force) {
+  barsVisible = typeof force === 'boolean' ? force : !barsVisible;
+  document.getElementById('topbar').classList.toggle('hidden', !barsVisible);
+  document.getElementById('bottombar').classList.toggle('hidden', !barsVisible);
+}
+
+function openDrawer(name) {
+  closeAllDrawers();
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('drawer-' + name).classList.add('open');
+  if (name === 'toc') {
+    renderToc();
+    setTimeout(() => {
+      const active = document.querySelector('#tocList .toc-item.active');
+      if (active) active.scrollIntoView({ block: 'center' });
+    }, 60);
+  } else if (name === 'bookshelf') {
+    renderBookshelf();
+  }
+}
+
+function closeAllDrawers() {
+  document.getElementById('overlay').classList.remove('open');
+  document.querySelectorAll('.drawer').forEach(d => d.classList.remove('open'));
+}
+
+function openLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+function createImageNode(url) {
+  const wrap = document.createElement('div');
+  wrap.className = 'novel-img-wrap';
+  const box = document.createElement('div');
+  box.className = 'novel-img-box';
+  wrap.appendChild(box);
+
+  const loadImg = (refresh = false) => {
+    box.innerHTML = '';
+    const status = document.createElement('div');
+    status.className = 'novel-img-status';
+    status.textContent = '正在加载插图...';
+    box.appendChild(status);
+
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    const proxyUrl = 'https://novelreader.local/api/image?url=' + encodeURIComponent(url) + (refresh ? '&refresh=1&t=' + Date.now() : '');
+    img.src = proxyUrl;
+    img.onload = () => { status.remove(); img.classList.add('loaded'); };
+    img.onerror = () => {
+      img.remove();
+      status.innerHTML = '<div>插图加载失败</div><button type="button">🔄 重新加载</button>';
+      status.querySelector('button').onclick = (e) => { e.stopPropagation(); loadImg(true); };
+    };
+    img.onclick = (e) => { e.stopPropagation(); openLightbox(proxyUrl); };
+    box.appendChild(img);
+  };
+
+  if (appState.settings.autoLoadImages !== false) {
+    loadImg(false);
+  } else {
+    const status = document.createElement('div');
+    status.className = 'novel-img-status';
+    status.innerHTML = '<div>[内嵌插图]</div><button type="button">点击加载插图</button>';
+    status.querySelector('button').onclick = (e) => { e.stopPropagation(); loadImg(false); };
+    box.appendChild(status);
+  }
+  return wrap;
+}
+
+function renderChapterContent(rawText) {
+  const container = document.getElementById('chapterBody');
+  container.innerHTML = '';
+  const frag = document.createDocumentFragment();
+
+  for (const line of rawText.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    IMG_TAG_RE.lastIndex = 0;
+    if (!IMG_TAG_RE.test(trimmed)) {
+      const p = document.createElement('p');
+      p.textContent = trimmed;
+      frag.appendChild(p);
+      continue;
+    }
+    IMG_TAG_RE.lastIndex = 0;
+    let lastIdx = 0, m;
+    while ((m = IMG_TAG_RE.exec(trimmed)) !== null) {
+      const before = trimmed.slice(lastIdx, m.index).trim();
+      if (before) { const p = document.createElement('p'); p.textContent = before; frag.appendChild(p); }
+      frag.appendChild(createImageNode(m[1]));
+      lastIdx = m.index + m[0].length;
+    }
+    const after = trimmed.slice(lastIdx).trim();
+    if (after) { const p = document.createElement('p'); p.textContent = after; frag.appendChild(p); }
+  }
+  container.appendChild(frag);
+}
+
+function openBook(bookId) {
+  const data = JSON.parse(AndroidBridge.getBookToc(bookId));
+  currentBookId = data.id;
+  currentToc = data.chapters || [];
+  document.getElementById('topBookTitle').textContent = data.title;
+  const savedCh = Math.min(Math.max(data.chapter || 0, 0), Math.max(0, currentToc.length - 1));
+  loadChapter(savedCh, true, data.scrollRatio || 0);
+}
+
+function loadChapter(idx, restoreScroll, scrollRatio) {
+  if (idx < 0 || idx >= currentToc.length) return;
+  currentChapter = idx;
+  const data = JSON.parse(AndroidBridge.getChapter(currentBookId, idx));
+  document.getElementById('chapterTitle').textContent = data.title;
+  renderChapterContent(data.content);
+  document.getElementById('prevBtn').disabled = idx <= 0;
+  document.getElementById('nextBtn').disabled = idx >= currentToc.length - 1;
+
+  const vp = document.getElementById('viewport');
+  if (restoreScroll && scrollRatio > 0) {
+    requestAnimationFrame(() => {
+      vp.scrollTop = Math.floor((vp.scrollHeight - vp.clientHeight) * scrollRatio);
+      updateScrollProgress();
+    });
+  } else {
+    vp.scrollTop = 0;
+    updateScrollProgress();
+  }
+  scheduleSaveProgress();
+}
+
+function goChapter(idx) {
+  if (idx < 0 || idx >= currentToc.length) return;
+  loadChapter(idx, false, 0);
+}
+
+function updateScrollProgress() {
+  const vp = document.getElementById('viewport');
+  const maxScroll = Math.max(1, vp.scrollHeight - vp.clientHeight);
+  const ratio = Math.min(1, Math.max(0, vp.scrollTop / maxScroll));
+  const pct = currentToc.length > 0 ? ((currentChapter + ratio) / currentToc.length) * 100 : 0;
+  document.getElementById('progressLine').style.width = pct.toFixed(1) + '%';
+  document.getElementById('bottomPercent').textContent = `${currentChapter + 1}/${currentToc.length} · ${pct.toFixed(1)}%`;
+}
+
+function scheduleSaveProgress() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (!currentBookId || !window.AndroidBridge) return;
+    const vp = document.getElementById('viewport');
+    const maxScroll = Math.max(1, vp.scrollHeight - vp.clientHeight);
+    const ratio = Math.min(1, Math.max(0, vp.scrollTop / maxScroll));
+    AndroidBridge.saveProgress(currentBookId, currentChapter, ratio);
+  }, 600);
+}
+
+function renderToc() {
+  const q = document.getElementById('tocSearch').value.trim().toLowerCase();
+  const list = document.getElementById('tocList');
+  list.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  currentToc.forEach((title, idx) => {
+    if (q && !title.toLowerCase().includes(q)) return;
+    const div = document.createElement('div');
+    div.className = 'toc-item' + (idx === currentChapter ? ' active' : '');
+    div.textContent = title;
+    div.onclick = () => { closeAllDrawers(); goChapter(idx); };
+    frag.appendChild(div);
+  });
+  list.appendChild(frag);
+}
+
+function renderBookshelf() {
+  appState = JSON.parse(AndroidBridge.getState());
+  const list = document.getElementById('bookshelfList');
+  list.innerHTML = '';
+  const allBooks = [
+    ...(appState.books || []),
+    { id: '__sample_demo__', title: '使用说明与插图测试（示例）', chapters: 2, chapter: 0, isSample: true }
+  ];
+  allBooks.forEach(b => {
+    const card = document.createElement('div');
+    card.className = 'book-card' + (b.id === currentBookId ? ' active' : '');
+    card.innerHTML = `
+      <div class="book-card-info">
+        <div class="book-card-title">${b.title}</div>
+        <div class="book-card-meta">共 ${b.chapters || 1} 章 · 第 ${(b.chapter || 0) + 1} 章</div>
+      </div>
+      ${b.isSample ? '' : '<button class="btn">🗑</button>'}
+    `;
+    card.onclick = () => { closeAllDrawers(); openBook(b.id); };
+    const del = card.querySelector('button');
+    if (del) {
+      del.onclick = (e) => {
+        e.stopPropagation();
+        AndroidBridge.deleteBook(b.id);
+        showToast('已移除');
+        if (currentBookId === b.id) openBook('__sample_demo__');
+        renderBookshelf();
+      };
+    }
+    list.appendChild(card);
+  });
+}
+
+function pickFile() {
+  closeAllDrawers();
+  AndroidBridge.pickTxtFile();
+}
+
+function clearCache() {
+  const n = AndroidBridge.clearImageCache();
+  showToast(`已清理 ${n} 张缓存图片`);
+}
+
+window.onBookImported = function(jsonStr) {
+  const data = JSON.parse(jsonStr);
+  showToast(`已导入《${data.title}》（共 ${data.chapters} 章）`);
+  openBook(data.id);
+};
+
+window.pageTurn = function(dir) {
+  const vp = document.getElementById('viewport');
+  vp.scrollBy({ top: dir * vp.clientHeight * 0.85, behavior: 'smooth' });
+};
+
+window.handleAndroidBack = function() {
+  if (document.getElementById('lightbox').classList.contains('open')) {
+    closeLightbox();
+    return true;
+  }
+  if (document.getElementById('overlay').classList.contains('open')) {
+    closeAllDrawers();
+    return true;
+  }
+  return false;
+};
+
+const viewport = document.getElementById('viewport');
+viewport.addEventListener('scroll', () => {
+  updateScrollProgress();
+  scheduleSaveProgress();
+});
+
+document.getElementById('readerColumn').addEventListener('click', (e) => {
+  if (e.target.closest('button, a, img')) return;
+  toggleBars();
+});
+
+// 初始化
+(function init() {
+  appState = JSON.parse(AndroidBridge.getState());
+  applySettings(appState.settings);
+  openBook(appState.last_book_id || '__sample_demo__');
+})();
+</script>
+</body>
+</html>
